@@ -45,19 +45,6 @@ template <typename O, typename M, class... Types> auto bind2(O* object, M method
     }                                                \
     BluetoothLEDevice& _device = *peripheral.device;
 
-#define CHECK_RESULT(_result)                            \
-    if (!_result)                                        \
-    {                                                    \
-        LOGE("result is null");                          \
-        return;                                          \
-    }                                                    \
-    auto _commStatus = _result.Status();                 \
-    if (_commStatus != GattCommunicationStatus::Success) \
-    {                                                    \
-        LOGE("communication status: %d", _commStatus);   \
-        return;                                          \
-    }
-
 #define FOR(object, vector)       \
     auto _vector = vector;       \
     if (!_vector)                 \
@@ -79,6 +66,19 @@ BLEManager::BLEManager(const Napi::Value& receiver, const Napi::Function& callba
     mReceivedRevoker = mAdvertismentWatcher.Received(winrt::auto_revoke, onReceived);
     auto onStopped = bind2(this, &BLEManager::OnScanStopped);
     mStoppedRevoker = mAdvertismentWatcher.Stopped(winrt::auto_revoke, onStopped);
+}
+
+const bool checkResult(auto _result) {
+    if (!_result) {
+        LOGE("result is null");
+        return false; // Indicate failure
+    }
+    auto _commStatus = _result.Status();
+    if (_commStatus != GattCommunicationStatus::Success) {
+        LOGE("communication status: %d", _commStatus);
+        return false; // Indicate failure
+    }
+    return true; // Indicate success
 }
 
 const char* adapterStateToString(AdapterState state)
@@ -277,7 +277,12 @@ void BLEManager::OnServicesDiscovered(IAsyncOperation<GattDeviceServicesResult> 
     if (status == AsyncStatus::Completed)
     {
         GattDeviceServicesResult result = asyncOp.GetResults();
-        CHECK_RESULT(result);
+        if (!checkResult(result)) {
+            // If checkResult fails, disconnect the device and return early.
+            this->Disconnect(uuid);
+            LOGE("Service discovery failed for device %s, disconnecting.", uuid.c_str());
+            return;
+        }
         std::vector<std::string> serviceUuids;
         FOR(service, result.Services())
         {
@@ -326,7 +331,9 @@ void BLEManager::OnIncludedServicesDiscovered(IAsyncOperation<GattDeviceServices
     if (status == AsyncStatus::Completed)
     {
         auto result = asyncOp.GetResults();
-        CHECK_RESULT(result);
+        if (!checkResult(result)) {
+            return;
+        }
         std::vector<std::string> servicesUuids;
         FOR(service, result.Services())
         {
@@ -375,7 +382,12 @@ void BLEManager::OnCharacteristicsDiscovered(IAsyncOperation<GattCharacteristics
     if (status == AsyncStatus::Completed)
     {
         auto result = asyncOp.GetResults();
-        CHECK_RESULT(result);
+        if (!checkResult(result)) {
+            // If checkResult fails, disconnect the device and return early.
+            this->Disconnect(uuid);
+            LOGE("Characteristics discovery failed for device %s, disconnecting.", uuid.c_str());
+            return;
+        }
         std::vector<std::pair<std::string, std::vector<std::string>>> characteristicsUuids;
 
         FOR(characteristic, result.Characteristics())
@@ -427,7 +439,12 @@ void BLEManager::OnRead(IAsyncOperation<GattReadResult> asyncOp, AsyncStatus sta
     if (status == AsyncStatus::Completed)
     {
         GattReadResult result = asyncOp.GetResults();
-        CHECK_RESULT(result);
+        if (!checkResult(result)) {
+            // If checkResult fails, disconnect the device and return early.
+            this->Disconnect(uuid);
+            LOGE("Read failed for device %s, disconnecting.", uuid.c_str());
+            return;
+        }
         auto value = result.Value();
         if (value)
         {
@@ -633,7 +650,9 @@ void BLEManager::OnDescriptorsDiscovered(IAsyncOperation<GattDescriptorsResult> 
     if (status == AsyncStatus::Completed)
     {
         auto result = asyncOp.GetResults();
-        CHECK_RESULT(result);
+        if (!checkResult(result)) {
+            return;
+        }
         std::vector<std::string> descriptorUuids;
         FOR(descriptor, result.Descriptors())
         {
@@ -681,7 +700,9 @@ void BLEManager::OnReadValue(IAsyncOperation<GattReadResult> asyncOp, AsyncStatu
     if (status == AsyncStatus::Completed)
     {
         GattReadResult result = asyncOp.GetResults();
-        CHECK_RESULT(result);
+        if (!checkResult(result)) {
+            return;
+        }
         auto value = result.Value();
         if (value)
         {
@@ -761,7 +782,9 @@ void BLEManager::OnReadHandle(IAsyncOperation<GattReadResult> asyncOp, AsyncStat
     if (status == AsyncStatus::Completed)
     {
         GattReadResult result = asyncOp.GetResults();
-        CHECK_RESULT(result);
+        if (!checkResult(result)) {
+            return;
+        }
         auto value = result.Value();
         if (value)
         {
