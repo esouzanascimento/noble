@@ -41,6 +41,7 @@ template <typename O, typename M, class... Types> auto bind2(O* object, M method
     if (!peripheral.device.has_value())              \
     {                                                \
         LOGE("device not connected");                \
+        this->Disconnect(_uuid);                     \
         return false;                                \
     }                                                \
     BluetoothLEDevice& _device = *peripheral.device;
